@@ -10,7 +10,7 @@ using UnityEngine.Serialization;
 public class RayTracingPass : CustomPostProcessingManager
 {
     //ComputeShader相关
-    public ComputeShader rayTracingShader;
+    public VolumeParameter<ComputeShader> computeShader = new VolumeParameter<ComputeShader>();
     private Material m_Material;
     private const string ShaderName = "Custom/RayTracingRT";
     private int m_MainTextureID = Shader.PropertyToID("_MainTex");
@@ -19,7 +19,7 @@ public class RayTracingPass : CustomPostProcessingManager
     private int m_KernelIndex;
     
     //天空盒
-    private Texture SkyboxTexture;
+    public TextureParameter SkyboxTexture = new TextureParameter(null);
 
     //相机
     private Camera m_Camera;
@@ -31,7 +31,7 @@ public class RayTracingPass : CustomPostProcessingManager
     public override int orderInPass => 2;
 
     //激活状态
-    public override bool IsActive() => rayTracingShader != null&& m_Material != null;
+    public override bool IsActive() => computeShader != null&& m_Material != null;
 
     //配置
     public override void Setup()
@@ -62,17 +62,17 @@ public class RayTracingPass : CustomPostProcessingManager
     public override void Render(CommandBuffer cmd, ref RenderingData renderingData, RTHandle source,
         RTHandle destination)
     {
-        if (m_RT == null && m_Material == null)
+        if (computeShader.value == null && m_RT == null && m_Material == null)
             return;
 
         //设置shader参数
         SetShaderParameters();
         
         //核函数索引
-        m_KernelIndex = rayTracingShader.FindKernel("RayTracing");
+        m_KernelIndex = computeShader.value.FindKernel("RayTracing");
 
         //RT设置到核函数的RWTexture2D中
-        rayTracingShader.SetTexture(m_KernelIndex, "Result", m_RT);
+        computeShader.value.SetTexture(m_KernelIndex, "Result", m_RT);
 
         //todo:尝试兼容BlitTexture，目前无法叠加自定义后处理
         //将RT赋值给材质
@@ -83,7 +83,7 @@ public class RayTracingPass : CustomPostProcessingManager
         //调度线程组，执行核函数
         int threadGrouphsX = Mathf.CeilToInt(Screen.width / 8.0f);
         int threadGrouphsY = Mathf.CeilToInt(Screen.height / 8.0f);
-        rayTracingShader.Dispatch(m_KernelIndex, threadGrouphsX, threadGrouphsY, 1);
+        computeShader.value.Dispatch(m_KernelIndex, threadGrouphsX, threadGrouphsY, 1);
 
         //进行屏幕绘制
         Blitter.BlitCameraTexture(cmd, source, destination, m_Material, 0);
@@ -95,8 +95,12 @@ public class RayTracingPass : CustomPostProcessingManager
     private void SetShaderParameters()
     {
         //获取从裁剪空间转换到世界空间的矩阵
-        rayTracingShader.SetMatrix("_CameraToWorld", m_Camera.cameraToWorldMatrix); //获得观察空间->世界空间的矩阵
-        rayTracingShader.SetMatrix("_CameraInverseProjection", m_Camera.projectionMatrix.inverse); //获得裁剪空间->观察空间的矩阵
+        computeShader.value.SetMatrix("_CameraToWorld", m_Camera.cameraToWorldMatrix); //获得观察空间->世界空间的矩阵
+        computeShader.value.SetMatrix("_CameraInverseProjection", m_Camera.projectionMatrix.inverse); //获得裁剪空间->观察空间的矩阵
+        
+        //天空盒
+        computeShader.value.SetTexture(m_KernelIndex, "_SkyboxTexture", SkyboxTexture.value);
+        
     }
 
     //释放
@@ -105,5 +109,7 @@ public class RayTracingPass : CustomPostProcessingManager
         base.Dispose(disposing);
         CoreUtils.Destroy(m_RT);
         CoreUtils.Destroy(m_Material);
+        computeShader.Release();
+        SkyboxTexture.Release();
     }
 }

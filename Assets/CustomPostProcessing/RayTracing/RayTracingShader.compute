@@ -1,0 +1,60 @@
+#pragma kernel RayTracing
+
+RWTexture2D<float4> Result;
+Texture2D<float4> _SkyboxTexture;
+SamplerState sampler_SkyboxTexture;
+static const float PI=3.14159265f;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+
+struct Ray
+{
+    float3 origin;
+    float3 direction; //原点和方向
+};
+
+//创建射线的函数
+Ray CreateRay(float3 origin,float3 direction) {
+    Ray ray;
+    ray.origin=origin;
+    ray.direction=direction;
+    return ray;
+}
+
+//创建相机的射线
+Ray CreateCameraRay(float2 uv)
+{
+    //相机原点转换到世界空间
+    float3 origin=mul(_CameraToWorld,float4(0.0f,0.0f,0.0f,1.0f)).xyz;
+    //屏幕空间坐标转换到观察空间
+    float3 projectivePoint = mul(_CameraInverseProjection,float4(uv,0.0f,1.0f)).xyz;
+    //得到射线方向向量：相机原点指向观察空间位置
+    float3 rayDirection = projectivePoint - float3(0,0,0).xyz;
+    //将方向向量转换到世界空间并归一化
+    rayDirection = mul(_CameraToWorld,float4(rayDirection,0.0f)).xyz;
+    rayDirection = normalize(rayDirection);
+
+    return CreateRay(origin,rayDirection);
+}
+
+//每个线程组有64个线程，每个线程处理一个像素
+[numthreads(8,8,1)]
+void RayTracing (uint3 id : SV_DispatchThreadID)
+{
+    uint width,height; //RT的宽高
+    Result.GetDimensions(width,height); //获取RWTexture2D纹理宽高
+
+    //计算uv
+    //uv的范围转换到是[-1,1]
+    float2 uv = float2((id.xy + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
+    float2 uv2 = (id.xy / float2(width, height))*0.5f+0.5f;
+    
+    Ray ray = CreateCameraRay(uv);
+
+    //笛卡尔方向向量转换为球坐标，并将其映射到纹理坐标
+    float theta = acos(ray.direction.y) / -PI;
+    float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
+    Result[id.xy] = _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0);
+    
+}
