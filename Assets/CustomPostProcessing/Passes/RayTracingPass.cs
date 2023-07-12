@@ -1,6 +1,6 @@
 using System;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
+using UnityEngine.Experimental.GlobalIllumination;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Serialization;
@@ -17,18 +17,25 @@ public class RayTracingPass : CustomPostProcessingManager
     private RenderTexture m_RT;
     private int m_KernelIndex;
     
+    //相机
+    private Camera m_Camera;
+    
+    //光照
+    public VolumeParameter<Light> directionalLight = new VolumeParameter<Light>();
+    
     //天空盒
     public TextureParameter SkyboxTexture = new TextureParameter(null);
-
+    
     //抗锯齿
     private uint m_CurrentSample = 0;
     private Material m_AntiAliasingMaterial;
     private int m_Sample = Shader.PropertyToID("_Sample");
     
-    //相机
-    private Camera m_Camera;
     
-
+    
+    
+    //-------------------------------------
+    
     //Pass插入点
     public override PassInjectionPoint passInjectionPoint => PassInjectionPoint.BeforeRenderingPostProcessing;
 
@@ -62,9 +69,12 @@ public class RayTracingPass : CustomPostProcessingManager
             m_RT.enableRandomWrite = true;
             m_RT.Create();
         }
-        
-        if(m_AntiAliasingMaterial== null)
+
+        if (m_AntiAliasingMaterial == null)
+        {
             m_AntiAliasingMaterial = CoreUtils.CreateEngineMaterial("RayTracing/AntiAliasing");
+        }
+        
     }
 
     //渲染
@@ -125,6 +135,10 @@ public class RayTracingPass : CustomPostProcessingManager
         Blitter.BlitCameraTexture(cmd, source, destination, m_AntiAliasingMaterial, 0);
         m_CurrentSample++;
         
+        //定向光
+        //Intensity调小一些，不然会有过曝现象
+        Vector3 l = directionalLight.value.transform.forward;
+        computeShader.value.SetVector("_DirectionalLight", new Vector4(l.x, l.y, l.z, directionalLight.value.intensity));
     }
 
     //释放
@@ -136,5 +150,7 @@ public class RayTracingPass : CustomPostProcessingManager
         CoreUtils.Destroy(m_AntiAliasingMaterial);
         computeShader.Release();
         SkyboxTexture.Release();
+        
+        
     }
 }

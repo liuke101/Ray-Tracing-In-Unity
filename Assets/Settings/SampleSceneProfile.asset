@@ -222,6 +222,10 @@ MonoBehaviour:
   computeShader:
     m_OverrideState: 1
     m_Value: {fileID: 7200000, guid: e45f1a7ddff5dbf45b716026d42493ad, type: 3}
+  directionalLight:
+    m_OverrideState: 1
+    m_Value: {fileID: 4409608205561304132, guid: 6dcfbc5555680454381bfb500edc90d4,
+      type: 3}
   SkyboxTexture:
     m_OverrideState: 1
     m_Value: {fileID: 2800000, guid: 03c7546d5e718bb4f8a2d23bdb0046cc, type: 3}
