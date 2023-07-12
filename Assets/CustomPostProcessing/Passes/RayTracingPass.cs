@@ -12,7 +12,6 @@ public class RayTracingPass : CustomPostProcessingManager
     //ComputeShader相关
     public VolumeParameter<ComputeShader> computeShader = new VolumeParameter<ComputeShader>();
     private Material m_Material;
-    private const string ShaderName = "Custom/RayTracingRT";
     private int m_MainTextureID = Shader.PropertyToID("_MainTex");
     //private static readonly int BlitTexture = Shader.PropertyToID("_BlitTexture");
     private RenderTexture m_RT;
@@ -21,9 +20,15 @@ public class RayTracingPass : CustomPostProcessingManager
     //天空盒
     public TextureParameter SkyboxTexture = new TextureParameter(null);
 
+    //抗锯齿
+    private uint m_CurrentSample = 0;
+    private Material m_AntiAliasingMaterial;
+    private int m_Sample = Shader.PropertyToID("_Sample");
+    
     //相机
     private Camera m_Camera;
     
+
     //Pass插入点
     public override PassInjectionPoint passInjectionPoint => PassInjectionPoint.BeforeRenderingPostProcessing;
 
@@ -36,9 +41,13 @@ public class RayTracingPass : CustomPostProcessingManager
     //配置
     public override void Setup()
     {
+        //主相机
+        if(m_Camera == null)
+            m_Camera = Camera.main;
+        
         if (m_Material == null)
         {
-            m_Material = CoreUtils.CreateEngineMaterial(ShaderName);
+            m_Material = CoreUtils.CreateEngineMaterial("RayTracing/RayTracingRT");
         }
         
         if (m_RT == null || m_RT.width != Screen.width || m_RT.height != Screen.height)
@@ -53,20 +62,27 @@ public class RayTracingPass : CustomPostProcessingManager
             m_RT.enableRandomWrite = true;
             m_RT.Create();
         }
-
-        //主相机
-        m_Camera = Camera.main;
+        
+        if(m_AntiAliasingMaterial== null)
+            m_AntiAliasingMaterial = CoreUtils.CreateEngineMaterial("RayTracing/AntiAliasing");
     }
 
     //渲染
     public override void Render(CommandBuffer cmd, ref RenderingData renderingData, RTHandle source,
         RTHandle destination)
     {
-        if (computeShader.value == null && m_RT == null && m_Material == null)
+        if (computeShader.value == null || m_RT == null || m_Material == null || m_AntiAliasingMaterial == null)
             return;
 
+        //检测相机变换
+        if (m_Camera.transform.hasChanged)
+        {
+            m_CurrentSample = 0;
+            m_Camera.transform.hasChanged = false;
+        }
+        
         //设置shader参数
-        SetShaderParameters();
+        SetShaderParameters(cmd, ref renderingData, source, destination);
         
         //核函数索引
         m_KernelIndex = computeShader.value.FindKernel("RayTracing");
@@ -87,20 +103,26 @@ public class RayTracingPass : CustomPostProcessingManager
 
         //进行屏幕绘制
         Blitter.BlitCameraTexture(cmd, source, destination, m_Material, 0);
+        
     }
 
     /// <summary>
     /// //设置shader参数
     /// </summary>
-    private void SetShaderParameters()
+    private void SetShaderParameters(CommandBuffer cmd, ref RenderingData renderingData, RTHandle source,
+        RTHandle destination)
     {
         //获取从裁剪空间转换到世界空间的矩阵
         computeShader.value.SetMatrix("_CameraToWorld", m_Camera.cameraToWorldMatrix); //获得观察空间->世界空间的矩阵
         computeShader.value.SetMatrix("_CameraInverseProjection", m_Camera.projectionMatrix.inverse); //获得裁剪空间->观察空间的矩阵
-        
+        computeShader.value.SetVector("_PixelOffset", new Vector2(UnityEngine.Random.value, UnityEngine.Random.value));
         //天空盒
         computeShader.value.SetTexture(m_KernelIndex, "_SkyboxTexture", SkyboxTexture.value);
         
+        //抗锯齿
+        m_AntiAliasingMaterial.SetFloat(m_Sample,m_CurrentSample);
+        cmd.Blit(m_RT,destination,m_AntiAliasingMaterial);
+        m_CurrentSample++;
     }
 
     //释放
@@ -109,6 +131,7 @@ public class RayTracingPass : CustomPostProcessingManager
         base.Dispose(disposing);
         CoreUtils.Destroy(m_RT);
         CoreUtils.Destroy(m_Material);
+        CoreUtils.Destroy(m_AntiAliasingMaterial);
         computeShader.Release();
         SkyboxTexture.Release();
     }

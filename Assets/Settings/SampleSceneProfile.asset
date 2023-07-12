@@ -59,7 +59,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 899c54efeace73346a0a16faa3afe726, type: 3}
   m_Name: Vignette
   m_EditorClassIdentifier: 
-  active: 1
+  active: 0
   color:
     m_OverrideState: 0
     m_Value: {r: 0, g: 0, b: 0, a: 1}
@@ -174,10 +174,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20c9a3b2041b452090e417dd60285f7e, type: 3}
   m_Name: ColorAdjustments
   m_EditorClassIdentifier: 
-  active: 1
+  active: 0
   postExposure:
     m_OverrideState: 0
-    m_Value: 0
+    m_Value: 1.8
   contrast:
     m_OverrideState: 0
     m_Value: 0
@@ -219,7 +219,13 @@ MonoBehaviour:
   m_Name: RayTracingPass
   m_EditorClassIdentifier: 
   active: 1
-  rayTracingShader: {fileID: 7200000, guid: e45f1a7ddff5dbf45b716026d42493ad, type: 3}
+  computeShader:
+    m_OverrideState: 1
+    m_Value: {fileID: 7200000, guid: e45f1a7ddff5dbf45b716026d42493ad, type: 3}
+  SkyboxTexture:
+    m_OverrideState: 1
+    m_Value: {fileID: 2800000, guid: 03c7546d5e718bb4f8a2d23bdb0046cc, type: 3}
+    dimension: 1
 --- !u!114 &8983951643527470994
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -232,7 +238,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 89299f0d90614752b06f8baa174872a1, type: 3}
   m_Name: ColorBlitPass
   m_EditorClassIdentifier: 
-  active: 1
+  active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 0.294
+    m_Value: 0
