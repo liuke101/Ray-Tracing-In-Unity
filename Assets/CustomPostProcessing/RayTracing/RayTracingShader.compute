@@ -15,6 +15,8 @@ float4x4 _CameraInverseProjection;
 float2 _PixelOffset;
 
 //光照
+//xyz为光照方向，指向光源，计算光照时要取反
+//w为光照强度
 float4 _DirectionalLight;
 
 //反照率/漫反射颜色
@@ -117,14 +119,14 @@ RayHit Trace(Ray ray)
     RayHit bestHit = CreateRayHit();
 
     //创建平面
-    //IntersectGroundPlane(ray, bestHit);
-    
+    IntersectGroundPlane(ray, bestHit);
+
     //创建球体
-    for(int i = 0; i < 10; i++ )
+    for (int i = 0; i < 10; i++)
     {
-        for(int j =0; j < 10; j++)
+        for (int j = 0; j < 10; j++)
         {
-            IntersectSphere(ray, bestHit, float4(i*3.0f, 1.0f, j*3.0f, 1.0f));
+            IntersectSphere(ray, bestHit, float4(i * 3.0f, 1.0f, j * 3.0f, 1.0f));
         }
     }
     return bestHit;
@@ -136,15 +138,26 @@ float3 Shade(inout Ray ray, RayHit hit)
     if (hit.distance < 1e30f)
     {
         //light ray
-        float3 specular = float3(0.1f, 0.1f, 0.1f); //反射率
+        //高光反射
+        float3 specular = float3(0.05f, 0.05f, 0.05f); //反射率
         ray.origin = hit.position + hit.normal * 0.001f;
         ray.direction = reflect(ray.direction, hit.normal);
         ray.energy *= specular;
-        
-        albedo = float3(0.5f, 0.5f, 0.5f);
-        float3 diffuse =saturate(dot(hit.normal, _DirectionalLight.xyz) * -1) * _DirectionalLight.w * albedo;
-        
-        return diffuse; 
+        //漫反射
+        albedo = float3(0.8f, 0.8f, 0.8f); //漫反射颜色
+        float3 diffuse = saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * albedo;
+
+        //shadow ray
+        bool shadow = false;
+        //shadow ray原点为交点位置，方向为光源方向
+        //hit.normal*0.001f是法线偏移，避免自阴影
+        Ray shadowRay = CreateRay(hit.position + hit.normal * 0.001f, -1 * _DirectionalLight.xyz);
+        RayHit shadowHit = Trace(shadowRay);
+        if (shadowHit.distance != 1e30f)
+        {
+            return float3(0.0f, 0.0f, 0.0f);
+        }
+        return diffuse;
     }
     //如果没有击中几何体，采样天空盒
     else
@@ -180,7 +193,7 @@ void RayTracing(uint3 id : SV_DispatchThreadID)
         result += ray.energy * Shade(ray, Hit);
 
         //ray.energy为0时，跳出循环
-        if(!any(ray.energy))
+        if (!any(ray.energy))
             break;
     }
     Result[id.xy] = float4(result, 1.0f);
