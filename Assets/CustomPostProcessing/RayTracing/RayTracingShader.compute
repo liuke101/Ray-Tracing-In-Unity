@@ -14,8 +14,9 @@ float2 _PixelOffset;
 //射线
 struct Ray
 {
-    float3 origin;
-    float3 direction; //原点和方向
+    float3 origin; //原点
+    float3 direction; //方向
+    float3 energy; //能量
 };
 
 //创建射线
@@ -24,6 +25,7 @@ Ray CreateRay(float3 origin, float3 direction)
     Ray ray;
     ray.origin = origin;
     ray.direction = direction;
+    ray.energy = float3(1.0f, 1.0f, 1.0f);
     return ray;
 }
 
@@ -83,7 +85,7 @@ void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere)
 {
     //球心到光线原点的向量
     float3 d = ray.origin - sphere.xyz;
-    
+
     float p1 = -dot(ray.direction, d);
 
     float p2Sqr = p1 * p1 - dot(d, d) + sphere.w * sphere.w;
@@ -105,23 +107,33 @@ RayHit Trace(Ray ray)
 {
     RayHit bestHit = CreateRayHit();
     //IntersectGroundPlane(ray, bestHit);
+    //此处添加球体
     IntersectSphere(ray, bestHit, float4(0.0f, 0.0f, 0.0f, 1.0f));
+    IntersectSphere(ray, bestHit, float4(0.0f, 5.0f, 0.0f, 1.0f));
     return bestHit;
 }
 
 float3 Shade(inout Ray ray, RayHit hit)
 {
+    //如果击中几何体，计算反射光线
     if (hit.distance < 1e30f)
     {
-        //如果击中几何体，则返回法线
-        return hit.normal * 0.5f + 0.5f;
+        float3 specular = float3(0.6f, 0.6f, 0.6f); //反射率
+        ray.origin = hit.position + hit.normal * 0.001f;
+        ray.direction = reflect(ray.direction, hit.normal);
+        ray.energy *= specular;
+        // Return nothing
+        return float3(0.0f, 0.0f, 0.0f);
     }
+    //如果没有击中几何体，采样天空盒
     else
     {
-        //如果没有击中几何体，采样天空盒
+        //消除光线的能量，因为天空不会反射光线
+        ray.energy = 0.0f;
+        //采样天空盒
         float theta = acos(ray.direction.y) / -PI;
         float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
-        return _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0);
+        return _SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz;
     }
 }
 
@@ -134,13 +146,22 @@ void RayTracing(uint3 id : SV_DispatchThreadID)
 
     //计算uv
     //uv的范围转换到是[-1,1]
-    float2 uv = float2(((id.xy+_PixelOffset) + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
+    float2 uv = float2(((id.xy + _PixelOffset) + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
     float2 uv2 = (id.xy / float2(width, height)) * 0.5f + 0.5f;
 
     Ray ray = CreateCameraRay(uv);
 
     //光线追踪+着色
-    RayHit Hit = Trace(ray);
-    float3 result = Shade(ray, Hit);
+    float3 result = float3(0, 0, 0);
+    //弹射7次
+    for (int i = 0; i < 8; i++)
+    {
+        RayHit Hit = Trace(ray);
+        result += ray.energy * Shade(ray, Hit);
+
+        //ray.energy为0时，跳出循环
+        if(!any(ray.energy))
+            break;
+    }
     Result[id.xy] = float4(result, 1.0f);
 }

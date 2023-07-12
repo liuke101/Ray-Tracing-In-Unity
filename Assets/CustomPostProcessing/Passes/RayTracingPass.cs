@@ -115,14 +115,16 @@ public class RayTracingPass : CustomPostProcessingManager
         //获取从裁剪空间转换到世界空间的矩阵
         computeShader.value.SetMatrix("_CameraToWorld", m_Camera.cameraToWorldMatrix); //获得观察空间->世界空间的矩阵
         computeShader.value.SetMatrix("_CameraInverseProjection", m_Camera.projectionMatrix.inverse); //获得裁剪空间->观察空间的矩阵
-        computeShader.value.SetVector("_PixelOffset", new Vector2(UnityEngine.Random.value, UnityEngine.Random.value));
+        
         //天空盒
         computeShader.value.SetTexture(m_KernelIndex, "_SkyboxTexture", SkyboxTexture.value);
         
         //抗锯齿
+        computeShader.value.SetVector("_PixelOffset", new Vector2(UnityEngine.Random.value, UnityEngine.Random.value)*0.1f);
         m_AntiAliasingMaterial.SetFloat(m_Sample,m_CurrentSample);
-        cmd.Blit(m_RT,destination,m_AntiAliasingMaterial);
+        Blitter.BlitCameraTexture(cmd, source, destination, m_AntiAliasingMaterial, 0);
         m_CurrentSample++;
+        
     }
 
     //释放
