@@ -62,6 +62,8 @@ struct RayHit
     float3 position;
     float distance;
     float3 normal;
+    float3 albedo;
+    float3 specular;
 };
 
 RayHit CreateRayHit()
@@ -71,8 +73,23 @@ RayHit CreateRayHit()
     //默认距离为无限大
     hit.distance = 1e30f; //地平面距离视为无限远
     hit.normal = float3(0.0f, 0.0f, 0.0f);
+    hit.albedo = float3(0.0f, 0.0f, 0.0f);
+    hit.specular = float3(0.0f, 0.0f, 0.0f);
     return hit;
 }
+
+//球体属性
+struct Sphere
+{
+    float3 position;
+    float radius;
+    float3 albedo;
+    float3 specular;
+};
+
+RWStructuredBuffer<Sphere> sphereBuffer;
+
+int spheresCount;
 
 //地平面相交
 //默认情况下，参数是按值传递的，而不是按引用传递，若要修改参数，需要使用inout关键字
@@ -80,36 +97,39 @@ void IntersectGroundPlane(Ray ray, inout RayHit bestHit)
 {
     //计算光线原点到地平面的距离
     //在世界空间中，地平面的 y 值是负的。我们向地面发射射线，所以ray.direction.y为负，我们添加一个负号让其为正数。
-    float t = -ray.origin.y / ray.direction.y;
     //当向天空发射射线时，t为负数
+    float t = -ray.origin.y / ray.direction.y;
+
+    //如果向地面发射射线
     if (t > 0 && t < bestHit.distance)
     {
         bestHit.distance = t;
         bestHit.position = ray.origin + ray.direction * t;
         bestHit.normal = float3(0.0f, 1.0f, 0.0f);
+        bestHit.albedo = float3(0.8f, 0.8f, 0.8f);
+        bestHit.specular = float3(0.1f, 0.1f, 0.1f);
     }
 }
 
 //球体相交
 //球体被定义为一个包含位置（xyz）和半径（w）的float4
-void IntersectSphere(Ray ray, inout RayHit bestHit, float4 sphere)
+void IntersectSphere(Ray ray, inout RayHit bestHit,Sphere sphere)
 {
     //球心到光线原点的向量
-    float3 d = ray.origin - sphere.xyz;
-
+    float3 d = ray.origin - sphere.position;
     float p1 = -dot(ray.direction, d);
-
-    float p2Sqr = p1 * p1 - dot(d, d) + sphere.w * sphere.w;
-    if (p2Sqr < 0)
+    float p2sqr = p1 * p1 - dot(d, d) + sphere.radius * sphere.radius;
+    if (p2sqr < 0)
         return;
-
-    float p2 = sqrt(p2Sqr);
+    float p2 = sqrt(p2sqr);
     float t = p1 - p2 > 0 ? p1 - p2 : p1 + p2;
     if (t > 0 && t < bestHit.distance)
     {
         bestHit.distance = t;
         bestHit.position = ray.origin + t * ray.direction;
-        bestHit.normal = normalize(bestHit.position - sphere.xyz);
+        bestHit.normal = normalize(bestHit.position - sphere.position);
+        bestHit.albedo = sphere.albedo;
+        bestHit.specular = sphere.specular;
     }
 }
 
@@ -118,16 +138,13 @@ RayHit Trace(Ray ray)
 {
     RayHit bestHit = CreateRayHit();
 
-    //创建平面
+    //Trace plane
     IntersectGroundPlane(ray, bestHit);
 
-    //创建球体
-    for (int i = 0; i < 10; i++)
+    //Trace spheres
+    for (int i = 0; i < spheresCount; i++)
     {
-        for (int j = 0; j < 10; j++)
-        {
-            IntersectSphere(ray, bestHit, float4(i * 3.0f, 1.0f, j * 3.0f, 1.0f));
-        }
+        IntersectSphere(ray, bestHit, sphereBuffer[i]);
     }
     return bestHit;
 }
@@ -139,13 +156,13 @@ float3 Shade(inout Ray ray, RayHit hit)
     {
         //light ray
         //高光反射
-        float3 specular = float3(0.05f, 0.05f, 0.05f); //反射率
+        //float3 specular = float3(0.05f, 0.05f, 0.05f); //反射率
         ray.origin = hit.position + hit.normal * 0.001f;
         ray.direction = reflect(ray.direction, hit.normal);
-        ray.energy *= specular;
+        ray.energy *= hit.specular;
         //漫反射
-        albedo = float3(0.8f, 0.8f, 0.8f); //漫反射颜色
-        float3 diffuse = saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * albedo;
+        //albedo = float3(0.8f, 0.8f, 0.8f); //漫反射颜色
+        float3 diffuse = saturate(dot(hit.normal, -_DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;
 
         //shadow ray
         bool shadow = false;
@@ -182,12 +199,13 @@ void RayTracing(uint3 id : SV_DispatchThreadID)
     //uv的范围转换到是[-1,1]
     float2 uv = float2(((id.xy + _PixelOffset) + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
 
+    //创建光线
     Ray ray = CreateCameraRay(uv);
-
+    
     //光线追踪+着色
     float3 result = float3(0, 0, 0);
     //弹射7次
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 32; i++)
     {
         RayHit Hit = Trace(ray);
         result += ray.energy * Shade(ray, Hit);
