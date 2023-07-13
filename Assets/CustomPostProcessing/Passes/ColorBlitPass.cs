@@ -2,7 +2,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
-using UnityEngine.Serialization;
 
 [Serializable, VolumeComponentMenuForRenderPipeline("Custom Post-processing/Color Blit", typeof(UniversalRenderPipeline))]
 public class ColorBlitPass : CustomPostProcessingManager
